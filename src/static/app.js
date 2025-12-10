@@ -20,11 +20,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        const participantsList = details.participants.length > 0 
+          ? `<ul class="participants-list">${details.participants.map(p => `<li>${p}</li>`).join('')}</ul>`
+          : '<p>No participants yet</p>';
+
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
-          <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <p><strong>Availability:</strong> <span class="spots-left">${spotsLeft}</span> spots left</p>
+          <p class="participants">
+            <strong>Participants:</strong> ${details.participants.length}/${details.max_participants}
+          </p>
+          <div class="participants-names">
+            <strong>Names:</strong>
+            ${participantsList}
+          </div>
         `;
 
         activitiesList.appendChild(activityCard);
@@ -39,6 +50,106 @@ document.addEventListener("DOMContentLoaded", () => {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
       console.error("Error fetching activities:", error);
     }
+  }
+
+  async function loadActivities() {
+    try {
+      const response = await fetch('/activities');
+      const activities = await response.json();
+      renderActivities(activities);
+    } catch (error) {
+      console.error('Error loading activities:', error);
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function renderActivities(activities) {
+    const container = document.getElementById('activities');
+    container.innerHTML = '';
+
+    Object.entries(activities).forEach(([name, activity]) => {
+      const card = document.createElement('div');
+      card.className = 'activity-card';
+
+      // Build participants HTML
+      const participants = Array.isArray(activity.participants) ? activity.participants : [];
+      let participantsHTML = '';
+      if (participants.length === 0) {
+        participantsHTML = `<div class="participants empty">📭 No participants yet</div>`;
+      } else {
+        participantsHTML = `<div class="participants">
+            <div class="participants-title">👥 Participants (${participants.length})</div>
+            <ul class="participants-list">`;
+        participants.forEach(p => {
+          participantsHTML += `<li>${escapeHtml(p)}</li>`;
+        });
+        participantsHTML += `</ul></div>`;
+      }
+
+      // Get schedule and availability
+      const schedule = activity.schedule || 'Not specified';
+      const availability = activity.availability || 'Not specified';
+
+      card.innerHTML = `
+          <h3 class="activity-title">${escapeHtml(name)}</h3>
+          <p class="activity-desc">${escapeHtml(activity.description || '')}</p>
+
+          <div class="activity-details">
+              <div class="detail-item">
+                  <span class="detail-label">📅 Schedule:</span>
+                  <span class="detail-value">${escapeHtml(schedule)}</span>
+              </div>
+              <div class="detail-item">
+                  <span class="detail-label">✅ Availability:</span>
+                  <span class="detail-value">${escapeHtml(availability)}</span>
+              </div>
+          </div>
+
+          ${participantsHTML}
+
+          <form class="signup-form" data-activity="${escapeHtml(name)}">
+              <input name="email" type="email" placeholder="student@example.com" required />
+              <button type="submit">Sign Up</button>
+          </form>
+          <div class="signup-msg" aria-live="polite"></div>
+      `;
+
+      // wire up the form submit
+      const form = card.querySelector('.signup-form');
+      const msg = card.querySelector('.signup-msg');
+      form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const email = form.email.value.trim();
+          if (!email) return;
+          const activityName = form.dataset.activity;
+          try {
+              const res = await fetch(`/activities/${encodeURIComponent(activityName)}/signup?email=${encodeURIComponent(email)}`, { method: 'POST' });
+              if (!res.ok) {
+                  const err = await res.json();
+                  msg.textContent = err.detail || 'Signup failed';
+                  msg.className = 'signup-msg error';
+              } else {
+                  msg.textContent = `✨ Signed up ${email}`;
+                  msg.className = 'signup-msg success';
+                  form.reset();
+                  await loadActivities(); // refresh to update participants list
+              }
+          } catch (err) {
+              msg.textContent = 'Network error';
+              msg.className = 'signup-msg error';
+          }
+      });
+
+      container.appendChild(card);
+    });
   }
 
   // Handle form submission
