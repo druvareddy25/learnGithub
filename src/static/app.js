@@ -56,12 +56,9 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const response = await fetch('/activities');
       const activities = await response.json();
-      // populate the select dropdown for signup form
+      // populate the select dropdown for signup form (clear safely)
       const activitySelect = document.getElementById('activity');
-      // remove existing options except the placeholder
-      Array.from(activitySelect.options).forEach(opt => {
-        if (opt.value) activitySelect.removeChild(opt);
-      });
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
       Object.keys(activities).forEach(name => {
         const option = document.createElement('option');
         option.value = name;
@@ -69,7 +66,11 @@ document.addEventListener("DOMContentLoaded", () => {
         activitySelect.appendChild(option);
       });
 
-      renderActivities(activities);
+      try {
+        renderActivities(activities);
+      } catch (err) {
+        console.error('Error rendering activities:', err);
+      }
     } catch (error) {
       console.error('Error loading activities:', error);
     }
@@ -156,7 +157,12 @@ document.addEventListener("DOMContentLoaded", () => {
                   msg.textContent = `✨ Signed up ${email}`;
                   msg.className = 'signup-msg success';
                   form.reset();
-                  await loadActivities(); // refresh to update participants list
+              // refresh to update participants list
+              try {
+              await loadActivities();
+              } catch (loadErr) {
+              console.error('Failed to refresh activities after signup:', loadErr);
+              }
               }
           } catch (err) {
               msg.textContent = 'Network error';
